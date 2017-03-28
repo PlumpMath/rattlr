@@ -11,12 +11,11 @@ python_connect <- function(python_path = "python3") {
 
     pc <- list()
     pc$proc <- pipe(paste(python_path,
-                          file.path("..", "python/rattlr.py"),
-                          pipe_dir, sep = " "), "w")
+                          file.path(find.package("rattlr"), "python/rattlr.py"),
+                          pipe_dir, sep = " "),
+                    "w")
     pc$pipe_dir <- pipe_dir
-    cat("open write\n")
     pc$out_pipe <- file(out_pipe, "wb")
-    cat("open read\n")
     pc$in_pipe <- file(in_pipe, "rb")
 
     pc
@@ -33,7 +32,7 @@ python_send <- function(pc, obj) {
 
     size <- readBin(pc$in_pipe, what = "int", n = 1, size = 4)
     raw <- readBin(pc$in_pipe, what = "raw", n = size)
-    jsonlite::fromJSON(rawToChar(raw))
+    jsonlite::fromJSON(rawToChar(raw), simplifyDataFrame = FALSE)
 }
 
 #' Evaluate expressions and/or statements in Python
@@ -56,16 +55,29 @@ python_eval <- function(pc, exprs = c(), imports = c(), envir = NULL) {
     response
 }
 
-#' rattlr
+#' Evaluate expressions and/or statements in Python and assign bindings
 #' @export
-rattlr <- function(pc, exprs = c(), imports = c(), envir = globalenv()) {
+python_eval_assign <- function(pc, exprs = c(), imports = c(), envir = globalenv()) {
     response <- python_eval(pc, exprs, imports, envir)
 
-    lapply(names(response$bindings), function(n) {
-        assign(n, response$bindings[[n]], envir = envir)
+    lapply(response$bindings, function(b) {
+        assign(b$name, b$value, envir = envir)
     })
+    response$bindings <- NULL
 
-    response$result
+    response
+}
+
+#' Evaluate expressions and/or statements in Python and assign bindings
+#' @export
+rattlr <- function(pc, ..., envir = globalenv()) {
+    exprs <- c(...)
+    response <- python_eval_assign(pc = pc, exprs = exprs, envir = envir)
+
+    if (response$type == "primitive")
+        response$value
+    else
+        response
 }
 
 #' Disconnect from a Python interpreter
