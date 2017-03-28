@@ -73,7 +73,6 @@ class Rattlr:
                 if n:
                     name = n.group(1)
                     req = self.request(name)
-                    # print("## request {}".format(req))
                     if "missing" in req:
                         raise err
                     else:
@@ -118,15 +117,13 @@ class Rattlr:
 
 
 def main(pipe_dir):
-    print("pipes dir: {}".format(pipe_dir))
-
     with open(os.path.join(pipe_dir, "rToPython"), "rb") as in_pipe:
         with open(os.path.join(pipe_dir, "pythonToR"), "wb") as out_pipe:
-            print("ready")
+            print("python started", file=sys.stderr)
             rattlr = Rattlr(in_pipe, out_pipe)
             while rattlr.receive_eval_send():
                 pass
-    print("done")
+    print("python shutdown", file=sys.stderr)
 
 
 if __name__ == '__main__':
