@@ -1,10 +1,16 @@
 Package: rattlr
 Type: Package
-Title: What the package does (short line)
-Version: 1.0
+Title: Transparent interop with Python
+Version: 0.1
 Date: 2017-03-18
-Author: Who wrote it
-Maintainer: Who to complain to <yourfault@somewhere.net>
-Description: More about what it does (maybe more than one line)
-License: What license is it under?
+Author: Matthew Farrell
+Maintainer: Matthew Farrell <farrellm@alum.mit.edu>
+Description: A simple interface for evaluating Python code from R with
+    transparent, bidirectional access to variables.
+License: MIT
+URL: https://github.com/farrellm/rattlr
+BugReports: https://github.com/farrellm/rattlr/issues
 RoxygenNote: 6.0.1
+Imports:
+    jsonlite,
+    readr
