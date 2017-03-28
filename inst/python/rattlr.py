@@ -41,10 +41,13 @@ class Rattlr:
         return json.loads(json_data)
 
     def send(self, reply):
-        reply_data = bytes(json.dumps(reply), "utf-8")
-        self.out_pipe.write(struct.pack("i", len(reply_data)))
-        self.out_pipe.write(reply_data)
-        self.out_pipe.flush()
+        try:
+            reply_data = bytes(json.dumps(reply), "utf-8")
+            self.out_pipe.write(struct.pack("i", len(reply_data)))
+            self.out_pipe.write(reply_data)
+            self.out_pipe.flush()
+        except Exception as exc:
+            self.send(wrap_value(exc))
 
     def request(self, name):
         req = {"type": "request",
