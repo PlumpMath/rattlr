@@ -1,4 +1,6 @@
+import io
 import json
+import pandas
 import os
 import re
 import struct
@@ -12,6 +14,9 @@ def wrap_value(val):
         return {"type": "exception",
                 "class": type(val).__name__,
                 "args": val.args}
+    elif isinstance(val, pandas.DataFrame):
+        return {"type": "dataframe",
+                "csv": val.to_csv(index=False)}
     else:
         return {"type": "primitive",
                 "value": val}
@@ -38,7 +43,12 @@ class Rattlr:
         if size == 0:
             return None
         json_data = self.in_pipe.read(size)[:-1]
-        return json.loads(json_data)
+        data = json.loads(json_data)
+        if "value" in data:
+            if "dataframe" in data["type"]:
+                str_in = io.StringIO(data["value"][0])
+                data["value"] = pandas.read_csv(str_in)
+        return data
 
     def send(self, reply):
         try:
@@ -79,7 +89,7 @@ class Rattlr:
                     if "missing" in req:
                         raise err
                     else:
-                        from_r[name] = req["value"][0]
+                        from_r[name] = req["value"]
                 else:
                     raise err
 

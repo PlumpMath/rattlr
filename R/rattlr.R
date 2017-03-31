@@ -24,6 +24,15 @@ python_connect <- function(python_path = "python3") {
 #' Send object to Python and wait for response
 #' @export
 python_send <- function(pc, obj) {
+    if (!is.null(obj$value)) {
+        if (inherits(obj$value, "data.frame")) {
+            obj$type <- "dataframe"
+            obj$value <- readr::format_csv(obj$value)
+        } else {
+            obj$type <- "primitive"
+        }
+    }
+
     j <- unclass(jsonlite::toJSON(obj))
     size <- as.integer(nchar(j) + 1)
     writeBin(size, con = pc$out_pipe, size = 4)
@@ -46,7 +55,7 @@ python_eval <- function(pc, exprs = c(), imports = c(), envir = NULL) {
         response <-
             if (exists(response$name, envir = envir)) {
                 python_send(pc, list(name = response$name,
-                                     value = envir[[response$name]]))
+                                     value = get(response$name, envir = envir)))
             } else {
                 python_send(pc, list(missing = "missing"))
             }
@@ -74,10 +83,13 @@ rattlr <- function(pc, ..., envir = globalenv()) {
     exprs <- c(...)
     response <- python_eval_assign(pc = pc, exprs = exprs, envir = envir)
 
-    if (response$type == "primitive")
+    if (response$type == "primitive") {
         response$value
-    else
+    } else if (response$type == "dataframe") {
+        readr::read_csv(response$csv)
+    } else {
         response
+    }
 }
 
 #' Disconnect from a Python interpreter
