@@ -1,7 +1,8 @@
 import io
 import json
-import pandas
+import numpy
 import os
+import pandas
 import re
 import struct
 import sys
@@ -14,6 +15,12 @@ def wrap_value(val):
         return {"type": "exception",
                 "class": type(val).__name__,
                 "args": val.args}
+    elif isinstance(val, numpy.int64):
+        return {"type": "primitive",
+                "value": numpy.asscalar(val)}
+    elif isinstance(val, numpy.ndarray):
+        return {"type": "primitive",
+                "value": val.tolist()}
     elif isinstance(val, pandas.DataFrame):
         return {"type": "dataframe",
                 "csv": val.to_csv(index=False)}
@@ -25,6 +32,84 @@ def wrap_value(val):
 def wrap_bindings(bindings):
     return [{"name": n, **wrap_value(v)}
             for n, v in bindings.items()]
+
+
+class Environment:
+    def __init__(self, rattlr, imports, bindings, from_r):
+        self.rattlr = rattlr
+        self.bindings = bindings
+        self.from_r = from_r
+        self.imports = imports
+
+    def make_locals(self):
+        return {**self.from_r, **self.rattlr.persistent, **self.bindings}
+
+    def evaluate(self, expr):
+        while True:
+            try:
+                return eval(expr, self.make_locals(), self.imports)
+            except NameError as err:
+                n = Rattlr.undefined.match(err.args[0])
+                if n:
+                    name = n.group(1)
+                    req = self.rattlr.request(name)
+                    if "missing" in req:
+                        raise err
+                    else:
+                        self.from_r[name] = req["value"]
+                else:
+                    raise err
+
+
+class Expression:
+    def __init__(self, envir):
+        self.envir = envir
+
+    def evaluate(self):
+        pass
+
+
+class SimpleExpr(Expression):
+    def __init__(self, expr, envir):
+        Expression.__init__(self, envir)
+        self.expr = expr
+
+    def evaluate(self):
+        return self.envir.evaluate(self.expr)
+
+
+class Assignment(Expression):
+    def __init__(self, name, expr, envir):
+        Expression.__init__(self, envir)
+        self.name = name
+        self.expr = SimpleExpr(expr, envir)
+
+    def evaluate(self):
+        res = self.expr.evaluate()
+        if self.name[0] == '_':
+            self.persistent[self.name] = res
+        else:
+            self.envir.bindings[self.name] = res
+        return None
+
+
+class SimpleImport(Expression):
+    def __init__(self, package, envir):
+        Expression.__init__(self, envir)
+        self.package = package
+
+    def evaluate(self):
+        self.envir.rattlr.persistent[self.package] = __import__(self.package)
+
+
+class ImportAs(Expression):
+    def __init__(self, name, package, envir):
+        Expression.__init__(self, envir)
+        self.name = name
+        self.package = package
+
+    def evaluate(self):
+        self.envir.rattlr.persistent[self.name] = __import__(self.package)
 
 
 class Rattlr:
@@ -48,6 +133,9 @@ class Rattlr:
             if "dataframe" in data["type"]:
                 str_in = io.StringIO(data["value"][0])
                 data["value"] = pandas.read_csv(str_in)
+            elif isinstance(data["value"], list):
+                data["value"] = numpy.asarray(data["value"])
+
         return data
 
     def send(self, reply):
@@ -65,54 +153,28 @@ class Rattlr:
         self.send(req)
         return self.receive()
 
-    def eval_expr(self, e, imports, bindings, from_r):
+    def make_expr(self, e, imports, bindings, from_r):
+        envir = Environment(self, imports, bindings, from_r)
         m = Rattlr.assignment.match(e)
-        while True:
-            lcls = {**self.persistent, **bindings, **from_r}
-            try:
-                if m:
-                    name = m.group(1)
-                    res = eval(m.group(2), lcls, imports)
-                    if name[0] == '_':
-                        self.persistent[name] = res
-                    else:
-                        bindings[name] = res
-                    return None
-                else:
-                    return eval(e, lcls, imports)
-
-            except NameError as err:
-                n = Rattlr.undefined.match(err.args[0])
-                if n:
-                    name = n.group(1)
-                    req = self.request(name)
-                    if "missing" in req:
-                        raise err
-                    else:
-                        from_r[name] = req["value"]
-                else:
-                    raise err
+        if m:
+            return Assignment(m.group(1), m.group(2), envir)
+        m = Rattlr.import_simple.match(e)
+        if m:
+            return SimpleImport(m.group(1), envir)
+        m = Rattlr.import_as.match(e)
+        if m:
+            return ImportAs(m.group(2), m.group(1), envir)
+        return SimpleExpr(e, envir)
 
     def eval_sequence(self, data):
         imports = {i: __import__(i) for i in data['imports']}
-
         try:
             bindings = {}
             from_r = {}
+            val = None
             for e in data['exprs']:
-                m = Rattlr.import_simple.match(e)
-                if m:
-                    self.persistent[m.group(1)] = __import__(m.group(1))
-                    val = None
-                    continue
-
-                m = Rattlr.import_as.match(e)
-                if m:
-                    self.persistent[m.group(2)] = __import__(m.group(1))
-                    val = None
-                    continue
-
-                val = self.eval_expr(e, imports, bindings, from_r)
+                expr = self.make_expr(e, imports, bindings, from_r)
+                val = expr.evaluate()
         except Exception as exc:
             val = exc
 
