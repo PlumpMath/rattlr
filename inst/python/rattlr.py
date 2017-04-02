@@ -44,10 +44,16 @@ class Environment:
     def make_locals(self):
         return {**self.from_r, **self.rattlr.persistent, **self.bindings}
 
-    def evaluate(self, expr):
+    def _eval(self, expr):
+        return eval(expr, self.make_locals(), self.imports)
+
+    def _exec(self, expr):
+        return exec(expr, self.make_locals(), self.imports)
+
+    def run_lookup(self, thunk):
         while True:
             try:
-                return eval(expr, self.make_locals(), self.imports)
+                return thunk()
             except NameError as err:
                 n = Rattlr.undefined.match(err.args[0])
                 if n:
@@ -59,6 +65,12 @@ class Environment:
                         self.from_r[name] = req["value"]
                 else:
                     raise err
+
+    def evaluate(self, expr):
+        return self.run_lookup(lambda: self._eval(expr))
+
+    def execute(self, expr):
+        return self.run_lookup(lambda: self._exec(expr))
 
 
 class Expression:
@@ -87,10 +99,22 @@ class Assignment(Expression):
     def evaluate(self):
         res = self.expr.evaluate()
         if self.name[0] == '_':
-            self.persistent[self.name] = res
+            self.envir.rattlr.persistent[self.name] = res
         else:
             self.envir.bindings[self.name] = res
         return None
+
+
+class AssignItem(Expression):
+    def __init__(self, name, item, expr, envir):
+        Expression.__init__(self, envir)
+        self.name = name
+        self.item = item
+        self.expr = expr
+
+    def evaluate(self):
+        stmt = "{}[{}] = {}".format(self.name, self.item, self.expr)
+        self.envir.execute(stmt)
 
 
 class SimpleImport(Expression):
@@ -114,6 +138,7 @@ class ImportAs(Expression):
 
 class Rattlr:
     assignment = re.compile("^\\s*([_a-zA-Z]\\w*)\\s*=\\s*(.+)$")
+    assign_item = re.compile("^\\s*([_a-zA-Z]\\w*)\\s*\[(.*)\]\\s*=\\s*(.+)$")
     undefined = re.compile("^name '(.+)' is not defined$")
     import_simple = re.compile("^\\s*import\\s+(\\S+)$")
     import_as = re.compile("^\\s*import\\s+(\\S+)\\s+as\\s+([_a-zA-Z]\\w*)$")
@@ -158,6 +183,9 @@ class Rattlr:
         m = Rattlr.assignment.match(e)
         if m:
             return Assignment(m.group(1), m.group(2), envir)
+        m = Rattlr.assign_item.match(e)
+        if m:
+            return AssignItem(m.group(1), m.group(2), m.group(3), envir)
         m = Rattlr.import_simple.match(e)
         if m:
             return SimpleImport(m.group(1), envir)
