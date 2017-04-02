@@ -8,6 +8,21 @@
 
 Transparent interop between R and Python
 
+## Requirements
+
+* Python 3
+* NumPy
+* Pandas
+
+## Installation
+
+Rattlr has not yet been submitted to CRAN. For now, you can install it via the `devtools` package:
+
+```R
+install.packages('devtools')
+devtools::install_github('farrellm/rattlr')
+```
+
 ## Tutorial
 Startup a Python interpreter
 ```R
