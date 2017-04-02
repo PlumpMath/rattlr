@@ -1,3 +1,4 @@
+import inspect
 import io
 import json
 import numpy
@@ -18,6 +19,9 @@ def wrap_value(val):
     elif isinstance(val, numpy.int64):
         return {"type": "primitive",
                 "value": numpy.asscalar(val)}
+    elif isinstance(val, range) or inspect.isgenerator(val):
+        return {"type": "primitive",
+                "value": list(val)}
     elif isinstance(val, numpy.ndarray):
         return {"type": "primitive",
                 "value": val.tolist()}
@@ -113,6 +117,7 @@ class AssignItem(Expression):
         self.expr = expr
 
     def evaluate(self):
+        Assignment(self.name, self.name, self.envir).evaluate()
         stmt = "{}[{}] = {}".format(self.name, self.item, self.expr)
         self.envir.execute(stmt)
 

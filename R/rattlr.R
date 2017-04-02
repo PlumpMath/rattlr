@@ -64,13 +64,23 @@ python_eval <- function(pc, exprs = c(), imports = c(), envir = NULL) {
     response
 }
 
+response_value <- function(response) {
+    if (response$type == "primitive") {
+        response$value
+    } else if (response$type == "dataframe") {
+        readr::read_csv(response$csv)
+    } else {
+        response
+    }
+}
+
 #' Evaluate expressions and/or statements in Python and assign bindings
 #' @export
 python_eval_assign <- function(pc, exprs = c(), imports = c(), envir = globalenv()) {
     response <- python_eval(pc, exprs, imports, envir)
 
     lapply(response$bindings, function(b) {
-        assign(b$name, b$value, envir = envir)
+        assign(b$name, response_value(b), envir = envir)
     })
     response$bindings <- NULL
 
@@ -82,14 +92,7 @@ python_eval_assign <- function(pc, exprs = c(), imports = c(), envir = globalenv
 rattlr <- function(pc, ..., envir = globalenv()) {
     exprs <- c(...)
     response <- python_eval_assign(pc = pc, exprs = exprs, envir = envir)
-
-    if (response$type == "primitive") {
-        response$value
-    } else if (response$type == "dataframe") {
-        readr::read_csv(response$csv)
-    } else {
-        response
-    }
+    response_value(response)
 }
 
 #' Disconnect from a Python interpreter
