@@ -123,30 +123,35 @@ class AssignItem(Expression):
 
 
 class SimpleImport(Expression):
-    def __init__(self, package, envir):
+    def __init__(self, package, subpackage, envir):
         Expression.__init__(self, envir)
         self.package = package
+        self.subpackage = subpackage
 
     def evaluate(self):
-        self.envir.rattlr.persistent[self.package] = __import__(self.package)
+        self.envir.rattlr.persistent[self.package] = __import__(self.subpackage)
 
 
 class ImportAs(Expression):
-    def __init__(self, name, package, envir):
+    def __init__(self, name, package, subpackage, envir):
         Expression.__init__(self, envir)
         self.name = name
         self.package = package
+        self.subpackage = subpackage
 
     def evaluate(self):
-        self.envir.rattlr.persistent[self.name] = __import__(self.package)
+        p = __import__(self.subpackage)
+        for s in self.subpackage.split('.')[1:]:
+            p = p.__getattribute__(s)
+        self.envir.rattlr.persistent[self.name] = p
 
 
 class Rattlr:
     assignment = re.compile("^\\s*([_a-zA-Z]\\w*)\\s*=\\s*(.+)$")
     assign_item = re.compile("^\\s*([_a-zA-Z]\\w*)\\s*\[(.*)\]\\s*=\\s*(.+)$")
     undefined = re.compile("^name '(.+)' is not defined$")
-    import_simple = re.compile("^\\s*import\\s+(\\S+)$")
-    import_as = re.compile("^\\s*import\\s+(\\S+)\\s+as\\s+([_a-zA-Z]\\w*)$")
+    import_simple = re.compile("^\\s*import\\s+((\w+)\\S*)$")
+    import_as = re.compile("^\\s*import\\s+((\\w+)\\S*)\\s+as\\s+([_a-zA-Z]\\w*)$")
 
     def __init__(self, in_pipe, out_pipe):
         self.in_pipe = in_pipe
@@ -193,10 +198,10 @@ class Rattlr:
             return AssignItem(m.group(1), m.group(2), m.group(3), envir)
         m = Rattlr.import_simple.match(e)
         if m:
-            return SimpleImport(m.group(1), envir)
+            return SimpleImport(m.group(2), m.group(1), envir)
         m = Rattlr.import_as.match(e)
         if m:
-            return ImportAs(m.group(2), m.group(1), envir)
+            return ImportAs(m.group(3), m.group(2), m.group(1), envir)
         return SimpleExpr(e, envir)
 
     def eval_sequence(self, data):
