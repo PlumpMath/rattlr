@@ -95,3 +95,16 @@ rattlr(pc,
        "os.path.join('dir', 'file')")
 # [1] "dir/file"
 ```
+
+Fit a model with Python
+```R
+iris_train <- iris[-1, ]
+iris_test <- iris[1, c('Sepal.Length', 'Sepal.Width')]
+
+rattlr(pc,
+       "import sklearn.svm as svm",
+       "_clf = svm.SVC()",
+       "_clf.fit(iris_train[['Sepal.Length', 'Sepal.Width']], iris_train['Species'])",
+       "_clf.predict(iris_test)")
+# [1] "setosa"
+```
